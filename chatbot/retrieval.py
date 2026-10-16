@@ -109,15 +109,26 @@ def tokenize(text: str) -> list[str]:
     return [stem(w) for w in words if w not in STOPWORDS and len(w) > 1]
 
 
-def query_groups(question: str) -> list[set[str]]:
-    """Each meaningful question word becomes a group: {word, *its synonyms}."""
-    groups, seen = [], set()
+def keywords(question: str) -> list[tuple[str, list[str]]]:
+    """Meaningful question words, each with its synonyms: [("program", ["department"]), ...]."""
+    found, seen = [], set()
     for token in tokenize(question):
         if token in GENERIC or token in seen:
             continue
         seen.add(token)
-        groups.append({token, *SYNONYMS.get(token, [])})
-    return groups
+        found.append((token, [s for s in SYNONYMS.get(token, []) if s != token]))
+    return found
+
+
+def query_groups(question: str) -> list[set[str]]:
+    """Each meaningful question word becomes a group: {word, *its synonyms}."""
+    return [{token, *syns} for token, syns in keywords(question)]
+
+
+def ignored_words(question: str) -> list[str]:
+    """Words dropped before searching (filler like "what", "the", or "college")."""
+    words = re.findall(r"[a-z0-9]+", question.lower().replace("wi-fi", "wifi"))
+    return [w for w in dict.fromkeys(words) if len(w) > 1 and (w in STOPWORDS or stem(w) in GENERIC)]
 
 
 def is_follow_up(question: str) -> bool:
@@ -183,33 +194,32 @@ class Retriever:
         hit = sum(w for g, w in zip(groups, weights) if any(t in self.docs[i] for t in g))
         return hit / total
 
-    def search(self, question: str, context: str | None = None) -> list[Result]:
-        """Return passages that genuinely support the question, best first.
+    def score_all(self, question: str, context: str | None = None) -> list[Result]:
+        """Score every passage that shares at least one word with the question, best first.
 
         `context` is the previous user question, used only for follow-ups such as
-        "What about Saturday?". Evidence is still checked against the *current*
-        question whenever it has meaningful words of its own.
+        "What about Saturday?". Evidence (coverage) is still checked against the
+        *current* question whenever it has meaningful words of its own.
         """
-        if not self.chunks:
-            return []
-
-        own_groups = query_groups(question)
         rank_text = f"{context} {question}" if context else question
-        rank_groups = query_groups(rank_text)
-        gate_groups = own_groups or rank_groups
-        if not gate_groups:
+        gate_groups = query_groups(question) or query_groups(rank_text)
+        if not self.chunks or not gate_groups:
             return []
 
         term_weights = self._term_weights(rank_text)
         gate_weights = [self._group_idf(g) for g in gate_groups]
         results = []
         for i, chunk in enumerate(self.chunks):
-            coverage = self._coverage(i, gate_groups, gate_weights)
             score = self._bm25(i, term_weights)
-            if coverage >= MIN_COVERAGE and score > 0:
+            if score > 0:
+                coverage = self._coverage(i, gate_groups, gate_weights)
                 results.append(Result(chunk, round(score, 3), round(coverage, 3)))
-
         results.sort(key=lambda r: (r.score, r.coverage), reverse=True)
+        return results
+
+    def search(self, question: str, context: str | None = None) -> list[Result]:
+        """Return only passages that genuinely support the question, best first."""
+        results = [r for r in self.score_all(question, context) if r.coverage >= MIN_COVERAGE]
         if not results:
             return []
         best = results[0].score
@@ -217,9 +227,4 @@ class Retriever:
 
     def candidates(self, question: str, context: str | None = None, limit: int = 4) -> list[Result]:
         """Top passages by score alone (no evidence check), for the LLM to judge."""
-        rank_text = f"{context} {question}" if context else question
-        term_weights = self._term_weights(rank_text)
-        scored = [Result(c, round(self._bm25(i, term_weights), 3), 0.0) for i, c in enumerate(self.chunks)]
-        scored = [r for r in scored if r.score > 0]
-        scored.sort(key=lambda r: r.score, reverse=True)
-        return scored[:limit]
+        return self.score_all(question, context)[:limit]

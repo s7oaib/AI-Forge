@@ -17,13 +17,14 @@ from pathlib import Path
 
 from . import llm
 from .knowledge import Chunk, load_knowledge, snapshot
-from .retrieval import Result, Retriever, is_follow_up
+from .retrieval import MIN_COVERAGE, Result, Retriever, ignored_words, is_follow_up, keywords
 
 log = logging.getLogger(__name__)
 
 MAX_QUESTION_CHARS = 500
 MAX_HISTORY_MESSAGES = 8
 MAX_HISTORY_CHARS = 2000
+TRACE_CANDIDATES = 5
 
 NOT_FOUND = "I couldn't find that in the current demo knowledge base, so I won't guess."
 
@@ -48,7 +49,7 @@ def clean_history(history) -> list[dict]:
 
 
 def _source(chunk: Chunk, role: str, score: float | None = None) -> dict:
-    return {"file": chunk.source, "heading": chunk.heading, "role": role, "score": score}
+    return {"file": chunk.source, "heading": chunk.heading, "role": role, "score": score, "text": chunk.text}
 
 
 class ChatEngine:
@@ -88,24 +89,47 @@ class ChatEngine:
             "warnings": self.kb.warnings,
         }
 
+    def knowledge(self) -> dict:
+        """Every file and section the bot can answer from (shown in the UI)."""
+        self.reload_if_changed()
+        files: dict[str, list[dict]] = {name: [] for name in self.kb.files}
+        for c in self.kb.chunks:
+            files[c.source].append({"heading": c.heading, "text": c.text})
+        return {"files": [{"file": f, "sections": secs} for f, secs in files.items()],
+                "warnings": self.kb.warnings}
+
     # ----- answering -------------------------------------------------------
+    def _trace(self, question: str, context: str | None) -> dict:
+        """What the retriever did, step by step - shown in the "How I found this" panel."""
+        scored = self.retriever.score_all(question, context)
+        return {
+            "keywords": [{"word": w, "synonyms": syns} for w, syns in keywords(question)],
+            "ignored": ignored_words(question),
+            "context": context,
+            "searched": {"passages": len(self.kb.chunks), "files": len(self.kb.files)},
+            "threshold": MIN_COVERAGE,
+            "candidates": [
+                {"file": r.chunk.source, "heading": r.chunk.heading, "score": r.score,
+                 "coverage": r.coverage, "passed": r.coverage >= MIN_COVERAGE}
+                for r in scored[:TRACE_CANDIDATES]
+            ],
+        }
+
     def _fallback(self, notice: str | None = None, context: str | None = None) -> dict:
         """Safe reply when the knowledge base has no supporting evidence."""
         text, sources = NOT_FOUND, []
         help_chunk = next((c for c in self.kb.chunks if "cannot answer" in c.heading.lower()), None)
         if help_chunk:
-            text += f"\n\nHere is what you can do instead (from **{help_chunk.source}**):\n\n{help_chunk.text}"
+            text += f"\n\n{help_chunk.text}"
             sources.append(_source(help_chunk, "fallback"))
         return {"answer": text, "grounded": False, "sources": sources, "mode": "retrieval",
                 "context_used": context, "notice": notice}
 
     def _retrieval_answer(self, results: list[Result], context: str | None, notice: str | None = None) -> dict:
         top = results[0]
-        text = (f"Here is what the knowledge base says (**{top.chunk.source}**, "
-                f"section \"{top.chunk.heading}\"):\n\n{top.chunk.text}")
         sources = [_source(top.chunk, "answer", top.score)]
         sources += [_source(r.chunk, "related", r.score) for r in results[1:]]
-        return {"answer": text, "grounded": True, "sources": sources, "mode": "retrieval",
+        return {"answer": top.chunk.text, "grounded": True, "sources": sources, "mode": "retrieval",
                 "context_used": context, "notice": notice}
 
     def answer(self, question, history=None, use_llm: bool | None = None) -> dict:
@@ -123,7 +147,11 @@ class ChatEngine:
         history = clean_history(history)
         previous = next((m["content"] for m in reversed(history) if m["role"] == "user"), None)
         context = previous if previous and is_follow_up(question) else None
+        reply = self._answer(question, history, context, use_llm)
+        reply["trace"] = self._trace(question, context)
+        return reply
 
+    def _answer(self, question: str, history: list[dict], context: str | None, use_llm: bool | None) -> dict:
         results = self.retriever.search(question, context=context)
 
         want_llm = self.llm_enabled if use_llm is None else use_llm

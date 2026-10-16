@@ -22,6 +22,13 @@ def test_status_reports_offline_mode_and_files(client):
 def test_chat_returns_answer_with_sources(client):
     data = client.post("/api/chat", json={"message": "How do I apply for admission?"}).get_json()
     assert data["grounded"] and data["sources"][0]["file"] == "admissions.md"
+    assert data["trace"]["candidates"][0]["passed"]
+
+
+def test_knowledge_endpoint_lists_files_and_sections(client):
+    data = client.get("/api/knowledge").get_json()
+    assert len(data["files"]) == 5 and data["warnings"] == []
+    assert all(f["sections"] for f in data["files"])
 
 
 @pytest.mark.parametrize("payload", [{"message": ""}, {"message": "   "}, {}, {"message": None}])

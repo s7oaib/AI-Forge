@@ -62,16 +62,32 @@ and which answer mode is active. Press `Ctrl+C` to stop.
 
 ## Using the chatbot
 
-- Type a question and press **Enter** (Shift+Enter adds a new line), or click **Send**.
-  You can also click one of the example questions.
-- Under each answer you'll see:
-  - **Source:** the file and section that supports the answer.
-  - **Related:** other matching sections.
-  - A chip showing whether the answer came from **Retrieval only** or **LLM + retrieval**.
-- **New chat** clears the conversation. Conversation history lives only in the browser
-  tab; nothing about the chat is saved on disk.
-- The badge at the top right shows the real answer mode: **Offline retrieval mode**,
-  **LLM: model-name**, or **LLM error → retrieval fallback**.
+The screen has two parts: the **conversation** on the left, and a panel on the right
+that shows how the assistant works. On a phone, the panel slides up from the bottom.
+
+- **Asking:** type a question and press **Enter** (Shift+Enter adds a new line), or pick
+  a starter question.
+  - "Try a question" starters are answerable from the files.
+  - "Try to catch it out" starters are deliberately missing from the files.
+- **Answer cards:** each one starts with its source, `file.md › Section`.
+  - Answers with no supporting passage are shown in amber and labelled
+    **Not in the knowledge base · nothing guessed**.
+- **How I found this panel:** shows the steps behind the selected answer (click any
+  answer to select it):
+  1. **Read the question.** Searched keywords are green, with their synonyms. Ignored
+     filler words are crossed out.
+  2. **Used the conversation.** Appears only for follow-ups such as "What about Saturday?".
+  3. **Searched N passages.** The top matches, each with a bar showing how much of the
+     question it covers. A passage needs to pass the 50% line to count as evidence.
+  4. **Answered with a source**, or **Refused to guess**.
+- **Knowledge files panel:** shows every file and section the bot knows. It opens at the
+  section behind the selected answer, so you can show where an answer came from.
+- **New chat** clears the conversation. History lives only in the browser tab; nothing
+  about the chat is saved on disk.
+- **Status:** the top bar shows the real answer mode: **Offline · N passages**,
+  **Claude · model-name**, or **Claude unavailable · using retrieval**.
+  - When Claude is configured, a **Retrieval / Claude** switch lets you compare both
+    modes live.
 
 ### Editing the knowledge during the workshop
 
@@ -108,7 +124,7 @@ retrieved passages instead:
 2. Set `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY=<your key>`.
 3. Restart `app.py`.
 
-A **Use LLM** switch then appears in the header, so you can compare the two modes live.
+A **Retrieval / Claude** switch then appears in the top bar, so you can compare the two modes live.
 
 How the LLM step stays grounded:
 
@@ -155,7 +171,7 @@ response → answer with source, or safe fallback.**
 | Layer | File | Job |
 |---|---|---|
 | Interface | `static/index.html`, `static/app.js`, `static/style.css` | Chat UI; keeps the conversation in the browser |
-| Web server | `app.py` | `GET /`, `GET /api/status`, `POST /api/chat`; JSON error handling |
+| Web server | `app.py` | `GET /`, `GET /api/status`, `GET /api/knowledge`, `POST /api/chat` (answer + sources + step-by-step trace); JSON error handling |
 | Knowledge | `chatbot/knowledge.py`, `knowledge/*.md` | Reads Markdown and splits it at `##` headings |
 | Retrieval | `chatbot/retrieval.py` | Tokenizes, expands synonyms, ranks with BM25, checks evidence |
 | Answering | `chatbot/answer.py` | Handles follow-ups, decides between LLM, retrieval and fallback |
@@ -220,8 +236,8 @@ college-chatbot/
 | 3 | What facilities does the college have? | Library, labs, sports, cafeteria, hostels, medical room, Wi-Fi. Source: `facilities.md › Facilities Overview` |
 | 4 | How do I apply for admission? | The 6 example steps. Source: `admissions.md › How to Apply for Admission` |
 | 5 | What are the office hours? | Mon–Fri 9–5, Sat 9–1, Sun closed. Source: `college_overview.md › Office Hours` |
-| 5b | What about Saturday? *(follow-up)* | Office Hours again, with the note "Follow-up understood using your previous question" |
-| 6 | What was the college's placement percentage last year? | **Safe fallback:** "I couldn't find that…" plus the contact procedure from `faq.md` |
+| 5b | What about Saturday? *(follow-up)* | Office Hours again, marked "Follow-up of …"; the panel shows a "Used the conversation" step |
+| 6 | What was the college's placement percentage last year? | **Safe fallback** (amber card): "I couldn't find that…" plus the contact procedure. Open "How I found this" to show every candidate falling short of the 50% line |
 
 Bonus: add the swimming-pool section shown above, then ask "Is there a swimming pool?"
 to show that the knowledge files, not the code, control what the bot knows.
@@ -248,8 +264,8 @@ to show that the knowledge files, not the code, control what the bot knows.
 | `ModuleNotFoundError: flask` | Run with `.venv` Python, or redo step 1 |
 | Port 5000 already in use | Set `PORT=5050` in `.env` (or in the shell) and restart |
 | Banner "Knowledge base: …" in the UI | A file in `knowledge/` is missing, empty or not UTF-8. The banner names it |
-| Badge says "LLM error → retrieval fallback" | Hover over the badge for the reason. Usually an invalid `ANTHROPIC_API_KEY` (401) or no internet |
-| LLM switch not visible | `.env` needs `LLM_PROVIDER=anthropic` and an `ANTHROPIC_API_KEY`, then a restart |
+| Status says "Claude unavailable · using retrieval" | Hover over the status, or open "How I found this", for the reason. Usually an invalid `ANTHROPIC_API_KEY` (401) or no internet |
+| Retrieval / Claude switch not visible | `.env` needs `LLM_PROVIDER=anthropic` and an `ANTHROPIC_API_KEY`, then a restart |
 | A known fact isn't found | Check the section heading and wording in the `.md` file, or add a synonym in `SYNONYMS` |
 
 ---

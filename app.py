@@ -31,6 +31,10 @@ def create_app(settings: Settings | None = None, engine: ChatEngine | None = Non
     def status():
         return jsonify(engine.status())
 
+    @app.get("/api/knowledge")
+    def knowledge():
+        return jsonify(engine.knowledge())
+
     @app.post("/api/chat")
     def chat():
         data = request.get_json(silent=True)

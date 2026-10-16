@@ -58,6 +58,30 @@ def test_follow_up_question_uses_conversation(engine):
     assert "9:00 AM to 1:00 PM" in reply["answer"]
 
 
+def test_trace_explains_a_grounded_answer(engine):
+    trace = engine.answer("Which academic programs can I choose from?")["trace"]
+    assert {"word": "program", "synonyms": ["department"]} in trace["keywords"]
+    assert "which" in trace["ignored"]
+    assert trace["searched"] == {"passages": len(engine.kb.chunks), "files": 5}
+    best = trace["candidates"][0]
+    assert best["heading"] == "Departments Available" and best["passed"]
+
+
+def test_trace_explains_a_fallback(engine):
+    trace = engine.answer("What was the college's placement percentage last year?")["trace"]
+    assert "college" in trace["ignored"]
+    assert trace["candidates"], "weak matches are still shown so the audience can see why they failed"
+    assert not any(c["passed"] for c in trace["candidates"])
+    assert all(c["coverage"] < trace["threshold"] for c in trace["candidates"])
+
+
+def test_knowledge_listing_matches_files(engine):
+    listing = engine.knowledge()
+    assert [f["file"] for f in listing["files"]] == engine.kb.files
+    sections = [s["heading"] for f in listing["files"] for s in f["sections"]]
+    assert "Office Hours" in sections and len(sections) == len(engine.kb.chunks)
+
+
 def test_malformed_history_is_ignored(engine):
     reply = engine.answer("What are the office hours?", history=[{"role": "hacker", "content": 1}, "junk", None])
     assert reply["grounded"]
@@ -97,8 +121,9 @@ def test_llm_answer_uses_cited_passages(llm_engine, monkeypatch):
     monkeypatch.setattr(llm, "generate_answer", fake)
     reply = llm_engine.answer("Which academic programs can I choose from?")
     assert reply["mode"] == "llm" and reply["grounded"]
-    assert reply["sources"] == [{"file": "departments.md", "heading": "Departments Available",
-                                 "role": "answer", "score": None}]
+    assert [(s["file"], s["heading"], s["role"]) for s in reply["sources"]] == [
+        ("departments.md", "Departments Available", "answer")]
+    assert "Computer Science" in reply["sources"][0]["text"]
     assert seen["passages"][0]["heading"] == "Departments Available"
 
 

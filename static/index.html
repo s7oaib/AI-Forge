@@ -4,55 +4,98 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>College Information Assistant</title>
+  <meta name="description" content="A workshop chatbot that answers questions about a fictional college from Markdown knowledge files and shows how it found each answer.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232e6a4f'/%3E%3Cpath d='M8 13l8-4 8 4-8 4-8-4zm3 2.5V20c0 1.5 2.2 3 5 3s5-1.5 5-3v-4.5' fill='none' stroke='%23fff' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <div class="app">
-    <header class="topbar">
-      <div class="brand">
-        <div class="logo" aria-hidden="true">🎓</div>
-        <div>
-          <h1>College Information Assistant</h1>
-          <p class="subtitle">Greenfield Demo College &middot; <span class="demo-tag">Illustrative demo data</span></p>
+  <a class="skip-link" href="#input">Skip to the question box</a>
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9"/><path d="M8 13l8-4 8 4-8 4-8-4zm3 2.5V20c0 1.5 2.2 3 5 3s5-1.5 5-3v-4.5"/></svg>
+      <div>
+        <h1>College Information Assistant</h1>
+        <p class="brand-sub">Greenfield Demo College <span class="flag">Demo data</span></p>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <div id="mode-switch" class="segmented" role="radiogroup" aria-label="Answer mode" hidden>
+        <button type="button" role="radio" data-mode="offline" aria-checked="false">Retrieval</button>
+        <button type="button" role="radio" data-mode="llm" aria-checked="true">Claude</button>
+      </div>
+      <p id="mode-status" class="mode-status" aria-live="polite"><span class="dot"></span><span class="label">Connecting…</span></p>
+      <button id="open-files" class="btn-quiet only-narrow" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10l2 2h6.5A1.5 1.5 0 0 1 20 7.5v11a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5z"/></svg>
+        Files
+      </button>
+      <button id="new-chat" class="btn-quiet" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        New chat
+      </button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <main class="chat" aria-label="Conversation">
+      <div id="kb-warning" class="kb-warning" role="alert" hidden></div>
+      <div id="messages" class="messages" aria-live="polite"></div>
+
+      <form id="composer" class="composer" autocomplete="off">
+        <label class="visually-hidden" for="input">Your question</label>
+        <div class="composer-box">
+          <textarea id="input" rows="1" maxlength="500" placeholder="Ask about departments, facilities, admissions…"></textarea>
+          <button id="send" class="btn-send" type="submit" aria-label="Send question">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg>
+          </button>
         </div>
+        <p class="composer-hint"><kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line</p>
+      </form>
+    </main>
+
+    <div id="sheet-backdrop" class="sheet-backdrop" hidden></div>
+    <aside id="panel" class="panel" aria-label="How the assistant works">
+      <div class="panel-head">
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" id="tab-explain" aria-selected="true" aria-controls="panel-explain">How I found this</button>
+          <button type="button" role="tab" id="tab-files" aria-selected="false" aria-controls="panel-files">Knowledge files</button>
+        </div>
+        <button id="close-panel" class="btn-icon only-narrow" type="button" aria-label="Close panel">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
       </div>
-      <div class="controls">
-        <span id="mode-badge" class="badge" title="How answers are produced">Checking&hellip;</span>
-        <label id="llm-toggle-wrap" class="toggle" hidden>
-          <input type="checkbox" id="llm-toggle">
-          <span>Use LLM</span>
-        </label>
-        <button id="new-chat" class="btn-secondary" type="button">New chat</button>
-      </div>
-    </header>
-
-    <div id="kb-warning" class="kb-warning" role="alert" hidden></div>
-
-    <main id="messages" class="messages" aria-live="polite"></main>
-
-    <form id="composer" class="composer" autocomplete="off">
-      <textarea id="input" rows="1" maxlength="500" placeholder="Ask about departments, facilities, admissions, office hours&hellip;" aria-label="Your question"></textarea>
-      <button id="send" class="btn-primary" type="submit">Send</button>
-    </form>
-    <p class="footnote">
-      Answers come only from the Markdown files in <code>knowledge/</code>.
-      Greenfield Demo College is fictional &mdash; these facts are for demonstration.
-    </p>
+      <section id="panel-explain" class="panel-body" role="tabpanel" aria-labelledby="tab-explain"></section>
+      <section id="panel-files" class="panel-body" role="tabpanel" aria-labelledby="tab-files" hidden></section>
+    </aside>
   </div>
 
   <template id="welcome-template">
     <div class="welcome">
-      <h2>Hi! I answer questions about Greenfield Demo College.</h2>
-      <p>I look up answers in the college's knowledge files and show you the source.
-         If something isn't in those files, I'll tell you instead of guessing.</p>
-      <p class="try">Try one of these:</p>
-      <div class="examples">
-        <button type="button" class="example">What departments are available?</button>
-        <button type="button" class="example">Which academic programs can I choose from?</button>
-        <button type="button" class="example">What facilities does the college have?</button>
-        <button type="button" class="example">How do I apply for admission?</button>
-        <button type="button" class="example">What are the office hours?</button>
-        <button type="button" class="example">What was the college's placement percentage last year?</button>
+      <p class="eyebrow">Greenfield Demo College is fictional. Every fact comes from the files in <code>knowledge/</code>.</p>
+      <h2>Ask about the college. I'll answer from its files, or tell you I don't know.</h2>
+      <div class="starters">
+        <section>
+          <h3>Try a question</h3>
+          <ul>
+            <li><button type="button" class="starter"><span class="tag">Departments</span>What departments are available?</button></li>
+            <li><button type="button" class="starter"><span class="tag">Same question, new words</span>Which academic programs can I choose from?</button></li>
+            <li><button type="button" class="starter"><span class="tag">Facilities</span>What facilities does the college have?</button></li>
+            <li><button type="button" class="starter"><span class="tag">Admissions</span>How do I apply for admission?</button></li>
+            <li><button type="button" class="starter"><span class="tag">Office hours</span>What are the office hours?</button></li>
+          </ul>
+        </section>
+        <section class="trick">
+          <h3>Try to catch it out</h3>
+          <p>These facts are not in the files, so the assistant should refuse to guess.</p>
+          <ul>
+            <li><button type="button" class="starter"><span class="tag">Not in the files</span>What was the college's placement percentage last year?</button></li>
+            <li><button type="button" class="starter"><span class="tag">Not in the files</span>Who is the principal?</button></li>
+          </ul>
+        </section>
       </div>
     </div>
   </template>
