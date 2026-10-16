@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>College Information Assistant</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">🎓</div>
+        <div>
+          <h1>College Information Assistant</h1>
+          <p class="subtitle">Greenfield Demo College &middot; <span class="demo-tag">Illustrative demo data</span></p>
+        </div>
+      </div>
+      <div class="controls">
+        <span id="mode-badge" class="badge" title="How answers are produced">Checking&hellip;</span>
+        <label id="llm-toggle-wrap" class="toggle" hidden>
+          <input type="checkbox" id="llm-toggle">
+          <span>Use LLM</span>
+        </label>
+        <button id="new-chat" class="btn-secondary" type="button">New chat</button>
+      </div>
+    </header>
+
+    <div id="kb-warning" class="kb-warning" role="alert" hidden></div>
+
+    <main id="messages" class="messages" aria-live="polite"></main>
+
+    <form id="composer" class="composer" autocomplete="off">
+      <textarea id="input" rows="1" maxlength="500" placeholder="Ask about departments, facilities, admissions, office hours&hellip;" aria-label="Your question"></textarea>
+      <button id="send" class="btn-primary" type="submit">Send</button>
+    </form>
+    <p class="footnote">
+      Answers come only from the Markdown files in <code>knowledge/</code>.
+      Greenfield Demo College is fictional &mdash; these facts are for demonstration.
+    </p>
+  </div>
+
+  <template id="welcome-template">
+    <div class="welcome">
+      <h2>Hi! I answer questions about Greenfield Demo College.</h2>
+      <p>I look up answers in the college's knowledge files and show you the source.
+         If something isn't in those files, I'll tell you instead of guessing.</p>
+      <p class="try">Try one of these:</p>
+      <div class="examples">
+        <button type="button" class="example">What departments are available?</button>
+        <button type="button" class="example">Which academic programs can I choose from?</button>
+        <button type="button" class="example">What facilities does the college have?</button>
+        <button type="button" class="example">How do I apply for admission?</button>
+        <button type="button" class="example">What are the office hours?</button>
+        <button type="button" class="example">What was the college's placement percentage last year?</button>
+      </div>
+    </div>
+  </template>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
